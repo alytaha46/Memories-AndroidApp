@@ -1,5 +1,8 @@
 package com.example.memories
 
+
+import android.Manifest.permission.ACCESS_FINE_LOCATION
+import android.Manifest.permission.CAMERA
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.IntentSender
@@ -14,38 +17,36 @@ import com.example.memories.base.BaseActivity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
+import com.google.android.gms.tasks.OnCompleteListener
+import kotlinx.android.synthetic.main.activity_add_memory.*
 
 
 class AddMemory : BaseActivity() {
     val LOCATION_PERMISSION_REQUEST_CODE = 1000
     val CAMERA_PERMISSION_REQUEST_CODE = 2000
+    val SETTINGS_DIALOG_REQUEST = 200
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_add_memory)
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-        if (isPermissionGranted(android.Manifest.permission.ACCESS_FINE_LOCATION)) {
-            showUserLoction()
-        } else {
-            requestPermissionFromUser()
-        }
+    fun isPermissionGranted(Permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Permission
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
-    fun requestPermissionFromUser() {
+    fun requestPermissionFromUser(permission: String, requestCode: Int) {
         if (ActivityCompat.shouldShowRequestPermissionRationale(
                 this,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
+                permission
             )
         ) {
-            showMessage(message = "Application wants to access your location to be able to save it in your note",
+            showMessage(message = "Application wants to access your location to be able to save it in your memory",
                 posActionName = "OK",
                 posAction = { dialog, _ ->
                     ActivityCompat.requestPermissions(
                         this,
-                        arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),
-                        LOCATION_PERMISSION_REQUEST_CODE
+                        arrayOf(permission),
+                        requestCode
                     )
                     dialog.dismiss()
                 },
@@ -54,34 +55,89 @@ class AddMemory : BaseActivity() {
         } else {
             ActivityCompat.requestPermissions(
                 this,
-                arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),
-                LOCATION_PERMISSION_REQUEST_CODE
+                arrayOf(permission),
+                requestCode
             )
         }
     }
 
-    val SETTINGS_DIALOG_REQUEST = 200
-    fun showUserLoction() {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
 
-        val locationRequest = LocationRequest.create().apply {
-            interval = 10000
-            fastestInterval = 5000
-            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+            showUserLoction()
+        }
+        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
+//            showUserLoction()
+        } else {
+            Toast.makeText(this, "User Denied the Permissions", Toast.LENGTH_LONG).show()
         }
 
-        val builder = LocationSettingsRequest.Builder()
-            .addLocationRequest(locationRequest)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_add_memory)
+        val location_text = location_text
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        if (isPermissionGranted(ACCESS_FINE_LOCATION)) {
+            showUserLoction()
+        } else {
+            requestPermissionFromUser(ACCESS_FINE_LOCATION, LOCATION_PERMISSION_REQUEST_CODE)
+        }
+        if (isPermissionGranted(CAMERA)) {
+            //showUserLoction()
+        } else {
+            requestPermissionFromUser(CAMERA, CAMERA_PERMISSION_REQUEST_CODE)
+        }
+
+    }
+
+    val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult?) {
+            result ?: return
+            for (location in result.locations) {
+                // Update UI with location data
+                // ...
+                location_text.setText("lat= "+location.latitude
+                        +" long= "+location.longitude
+                        +" acc= "+location.accuracy)
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun getLocationFromClientApi() {
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            Looper.getMainLooper()
+        )
+    }
+
+    val locationRequest = LocationRequest.create().apply {
+        interval = 5000
+        fastestInterval = 1000
+        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+    }
+
+    fun showUserLoction() {
+
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
         val result = LocationServices.getSettingsClient(this).checkLocationSettings(builder.build())
+
         result.addOnCompleteListener {
             try {
                 val response = it.getResult(ApiException::class.java)
                 // All location settings are satisfied. The client can initialize location
                 // requests here.
-                getLocationFromClientApi()
-
+                getLocationFromClientApi();
             } catch (exception: ApiException) {
-                when (exception.getStatusCode()) {
-                    LocationSettingsStatusCodes.RESOLUTION_REQUIRED ->
+                when (exception.statusCode) {
+                    LocationSettingsStatusCodes.RESOLUTION_REQUIRED -> {
                         // Location settings are not satisfied. But could be fixed by showing the
                         // user a dialog.
                         try {
@@ -92,25 +148,26 @@ class AddMemory : BaseActivity() {
                             resolvable.startResolutionForResult(
                                 this@AddMemory,
                                 SETTINGS_DIALOG_REQUEST
-                            );
+                            )
                         } catch (e: IntentSender.SendIntentException) {
                             // Ignore the error.
                         } catch (e: ClassCastException) {
                             // Ignore, should be an impossible error.
                         }
-
-                    LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE ->
+                    }
+                    LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE -> {
                         // Location settings are not satisfied. However, we have no way to fix the
                         // settings so we won't show the dialog.
                         Toast.makeText(this, "Cannot Access your Location", Toast.LENGTH_LONG)
+                    }
                 }
             }
         }
     }
 
-    override fun onActivityResult(resultCode: Int, requestCode: Int, data: Intent) {
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        val states: LocationSettingsStates = LocationSettingsStates.fromIntent(intent);
+        val states: LocationSettingsStates = LocationSettingsStates.fromIntent(data);
         when (requestCode) {
             SETTINGS_DIALOG_REQUEST ->
                 if (resultCode == RESULT_OK) {
@@ -118,51 +175,13 @@ class AddMemory : BaseActivity() {
                     getLocationFromClientApi()
                 } else if (resultCode == RESULT_CANCELED) {
                     // The user was asked to change settings, but chose not to
-                    Toast.makeText(this, "Cannot Access your Location", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this,
+                        "Cannot Access your Location Please open GPS",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
-
         }
     }
 
-    //    val locationCallback=object :LocationCallback(){
-//        override fun onLocationAvailability(p0: LocationAvailability?) {
-//            super.onLocationAvailability(p0)
-//        }
-//
-//        override fun onLocationResult(p0: LocationResult?) {
-//            super.onLocationResult(p0)
-//        }
-//    }
-    @SuppressLint("MissingPermission")
-    fun getLocationFromClientApi() {
-//        fusedLocationClient.requestLocationUpdates(locationRequest,
-//            locationCallback,
-//            Looper.getMainLooper())
-        fusedLocationClient.lastLocation
-            .addOnSuccessListener { location: Location? ->
-            }
-    }
-
-
-    fun isPermissionGranted(Permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Permission
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            showUserLoction()
-        } else if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
-            showUserLoction()
-        } else {
-            Toast.makeText(this, "User Denied the Permissions", Toast.LENGTH_LONG).show()
-        }
-
-    }
 }
