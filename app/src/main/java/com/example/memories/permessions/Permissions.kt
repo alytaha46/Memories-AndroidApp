@@ -1,5 +1,7 @@
 package com.example.memories.permessions
 
+import android.Manifest
+import android.Manifest.permission.*
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
@@ -8,27 +10,39 @@ import androidx.core.content.ContextCompat
 import com.example.memories.base.BaseActivity
 
 
-class Permissions:BaseActivity() {
+class Permissions : BaseActivity() {
     companion object {
-        fun isPermissionGranted(context: Context, Permission: String): Boolean {
-            return ContextCompat.checkSelfPermission(
-                context,
-                Permission
-            ) == PackageManager.PERMISSION_GRANTED
+        var flag = false;
+
+        fun isPermissionGranted(context: Context, Permission: Array<String>): Boolean {
+            for (permission in Permission) {
+                if (ActivityCompat.checkSelfPermission(
+                        context,
+                        permission
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    return false
+                }
+            }
+            return true
         }
 
-        fun requestPermissionFromUser(activity: Activity, permission: String, requestCode: Int) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission))
-            {
-                showMessage(message = "Application wants to access your location to be able to save it in your memory",
+        fun requestPermissionFromUser(activity: Activity, permissions: Array<String>, requestCode: Int) {
+            for (permission in permissions) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)) {
+                    flag = true
+                    break
+                }
+            }
+            if (flag) {
+                showMessage(message = "Application wants to these permissions to be able to save it in your memory",
                     posActionName = "OK",
                     context = activity,
                     posAction = { dialog, _ ->
                         ActivityCompat.requestPermissions(
                             activity,
-                            arrayOf(permission),
-                            requestCode,
-
+                            permissions,
+                            requestCode
                         )
                         dialog.dismiss()
                     },
@@ -37,7 +51,7 @@ class Permissions:BaseActivity() {
             } else {
                 ActivityCompat.requestPermissions(
                     activity,
-                    arrayOf(permission),
+                    permissions,
                     requestCode
                 )
             }

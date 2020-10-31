@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -26,27 +27,38 @@ import kotlinx.android.synthetic.main.activity_add_memory.*
 
 
 class AddMemory : BaseActivity() {
-    val LOCATION_PERMISSION_REQUEST_CODE = 1000
-    val CAMERA_PERMISSION_REQUEST_CODE = 2000
+    val PERMISSIONS_REQUEST_CODE = 1000
     val SETTINGS_DIALOG_REQUEST = 200
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    var permissions_request: Array<String> = arrayOf(ACCESS_FINE_LOCATION, CAMERA)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_add_memory)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        if (!isPermissionGranted(this,ACCESS_FINE_LOCATION)) {
+        if (!isPermissionGranted(this, permissions_request)) {
+            requestPermissionFromUser(this, permissions_request, PERMISSIONS_REQUEST_CODE)
+        } else {
+            showUserLoction()
+        }
+
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (grantResults[0] == 0) {
             showUserLoction()
         } else {
-            requestPermissionFromUser(this,ACCESS_FINE_LOCATION, LOCATION_PERMISSION_REQUEST_CODE)
+            Toast.makeText(this, "User Denied the Location Permissions", Toast.LENGTH_LONG).show()
         }
-        if (isPermissionGranted(this,CAMERA)) {
-
+        if (grantResults[1] == 0) {
+            //camera
         } else {
-            Toast.makeText(this, "camera", Toast.LENGTH_SHORT).show()
-            requestPermissionFromUser(this,CAMERA, CAMERA_PERMISSION_REQUEST_CODE)
+            Toast.makeText(this, "User Denied the Camera Permissions", Toast.LENGTH_LONG).show()
         }
-
     }
 
     val locationCallback = object : LocationCallback() {
@@ -55,9 +67,11 @@ class AddMemory : BaseActivity() {
             for (location in result.locations) {
                 // Update UI with location data
                 // ...
-                location_text.setText("lat= "+location.latitude
-                        +" long= "+location.longitude
-                        +" acc= "+location.accuracy)
+                location_text.setText(
+                    "lat= " + location.latitude
+                            + " long= " + location.longitude
+                            + " acc= " + location.accuracy
+                )
             }
         }
     }
@@ -75,7 +89,6 @@ class AddMemory : BaseActivity() {
             Looper.getMainLooper()
         )
     }
-
 
 
     fun showUserLoction() {
