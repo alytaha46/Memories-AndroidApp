@@ -4,6 +4,8 @@ package com.example.memories
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.Manifest.permission.CAMERA
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
@@ -14,6 +16,8 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.memories.base.BaseActivity
+import com.example.memories.permessions.Permissions.Companion.isPermissionGranted
+import com.example.memories.permessions.Permissions.Companion.requestPermissionFromUser
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
@@ -27,71 +31,20 @@ class AddMemory : BaseActivity() {
     val SETTINGS_DIALOG_REQUEST = 200
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-    fun isPermissionGranted(Permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(
-            this,
-            Permission
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    fun requestPermissionFromUser(permission: String, requestCode: Int) {
-        if (ActivityCompat.shouldShowRequestPermissionRationale(
-                this,
-                permission
-            )
-        ) {
-            showMessage(message = "Application wants to access your location to be able to save it in your memory",
-                posActionName = "OK",
-                posAction = { dialog, _ ->
-                    ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(permission),
-                        requestCode
-                    )
-                    dialog.dismiss()
-                },
-                negActionName = "Cancel",
-                negAction = { dialog, _ -> dialog.dismiss() })
-        } else {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(permission),
-                requestCode
-            )
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            showUserLoction()
-        }
-        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
-//            showUserLoction()
-        } else {
-            Toast.makeText(this, "User Denied the Permissions", Toast.LENGTH_LONG).show()
-        }
-
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_add_memory)
-        val location_text = location_text
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        if (isPermissionGranted(ACCESS_FINE_LOCATION)) {
+        if (!isPermissionGranted(this,ACCESS_FINE_LOCATION)) {
             showUserLoction()
         } else {
-            requestPermissionFromUser(ACCESS_FINE_LOCATION, LOCATION_PERMISSION_REQUEST_CODE)
+            requestPermissionFromUser(this,ACCESS_FINE_LOCATION, LOCATION_PERMISSION_REQUEST_CODE)
         }
-        if (isPermissionGranted(CAMERA)) {
-            //showUserLoction()
+        if (isPermissionGranted(this,CAMERA)) {
+
         } else {
-            requestPermissionFromUser(CAMERA, CAMERA_PERMISSION_REQUEST_CODE)
+            Toast.makeText(this, "camera", Toast.LENGTH_SHORT).show()
+            requestPermissionFromUser(this,CAMERA, CAMERA_PERMISSION_REQUEST_CODE)
         }
 
     }
@@ -108,6 +61,11 @@ class AddMemory : BaseActivity() {
             }
         }
     }
+    val locationRequest = LocationRequest.create().apply {
+        interval = 5000
+        fastestInterval = 1000
+        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+    }
 
     @SuppressLint("MissingPermission")
     fun getLocationFromClientApi() {
@@ -118,11 +76,7 @@ class AddMemory : BaseActivity() {
         )
     }
 
-    val locationRequest = LocationRequest.create().apply {
-        interval = 5000
-        fastestInterval = 1000
-        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-    }
+
 
     fun showUserLoction() {
 
