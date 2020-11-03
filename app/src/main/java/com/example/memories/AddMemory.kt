@@ -1,47 +1,114 @@
 package com.example.memories
 
 
-import android.Manifest.permission.ACCESS_FINE_LOCATION
-import android.Manifest.permission.CAMERA
+import android.Manifest.permission.*
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
-import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.location.Location
 import android.os.Bundle
+import android.os.Environment
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
+import android.widget.Button
+import android.widget.ImageView
 import android.widget.Toast
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.example.memories.base.BaseActivity
+import com.example.memories.database.MemoriesDatabase
+import com.example.memories.database.Memory
+import com.example.memories.location.Location.Companion.SETTINGS_DIALOG_REQUEST
+import com.example.memories.location.Location.Companion.getLocationFromClientApi
+import com.example.memories.location.Location.Companion.showUserLoction
 import com.example.memories.permessions.Permissions.Companion.isPermissionGranted
 import com.example.memories.permessions.Permissions.Companion.requestPermissionFromUser
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
-import com.google.android.gms.tasks.OnCompleteListener
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.LatLng
 import kotlinx.android.synthetic.main.activity_add_memory.*
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.*
 
 
-class AddMemory : BaseActivity() {
+class AddMemory : BaseActivity(), OnMapReadyCallback {
     val PERMISSIONS_REQUEST_CODE = 1000
-    val SETTINGS_DIALOG_REQUEST = 200
+    val CAMERA_REQUEST = 1888
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    var permissions_request: Array<String> = arrayOf(ACCESS_FINE_LOCATION, CAMERA)
+    var permissions_request: Array<String> =
+        arrayOf(ACCESS_FINE_LOCATION, CAMERA, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE)
 
+    lateinit var img: ImageView
+    lateinit var add_img_button: Button
+    var title: String? = null
+    var description: String? = null
+    lateinit var save_button: Button
+    var bitmap: Bitmap? = null
+    var lat: Double? = null
+    var long: Double? = null
+    var file: File? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_add_memory)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        img = saved_img
+        add_img_button = camera_btn
         if (!isPermissionGranted(this, permissions_request)) {
             requestPermissionFromUser(this, permissions_request, PERMISSIONS_REQUEST_CODE)
         } else {
-            showUserLoction()
+            showUserLoction(this,fusedLocationClient,locationCallback)
+            add_img_button.setOnClickListener {
+                val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                startActivityForResult(cameraIntent, CAMERA_REQUEST)
+            }
         }
-
+        add_img_button.setOnClickListener {
+            if (!isPermissionGranted(this, permissions_request)) {
+                requestPermissionFromUser(this, permissions_request, PERMISSIONS_REQUEST_CODE)
+            } else {
+                val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                startActivityForResult(cameraIntent, CAMERA_REQUEST)
+            }
+        }
+        val map = supportFragmentManager.findFragmentById(R.id.mapView) as SupportMapFragment
+        map.getMapAsync(this)
+        save_button = save
+        save_button.setOnClickListener {
+            title = title_text.text.toString()
+            description = description_text.text.toString()
+            if (title == "") {
+                Toast.makeText(this, "you must add title", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (description == "") {
+                Toast.makeText(this, "you must add description", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (bitmap == null) {
+                Toast.makeText(this, "you must add image", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            file = saveImage(bitmap)
+            MemoriesDatabase.getInstance(applicationContext)
+                .memoriesDao().addMemory(
+                    Memory(
+                        title = title,
+                        description = description,
+                        date = Date().toString(),
+                        path = file?.path.toString(),
+                        lat = lat,
+                        long = long
+                    )
+                )
+            finish()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -50,14 +117,40 @@ class AddMemory : BaseActivity() {
         grantResults: IntArray
     ) {
         if (grantResults[0] == 0) {
-            showUserLoction()
+            showUserLoction(this,fusedLocationClient,locationCallback)
         } else {
             Toast.makeText(this, "User Denied the Location Permissions", Toast.LENGTH_LONG).show()
         }
         if (grantResults[1] == 0) {
             //camera
+            add_img_button.setOnClickListener {
+                val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                startActivityForResult(cameraIntent, CAMERA_REQUEST)
+            }
         } else {
             Toast.makeText(this, "User Denied the Camera Permissions", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode === CAMERA_REQUEST && resultCode === RESULT_OK) {
+            img.setImageBitmap(data?.extras?.get("data") as Bitmap)
+            bitmap = data?.extras?.get("data") as Bitmap
+        }
+        when (requestCode) {
+            SETTINGS_DIALOG_REQUEST ->
+                if (resultCode == RESULT_OK) {
+                    // All required changes were successfully made
+                    getLocationFromClientApi(fusedLocationClient,locationCallback)
+                } else if (resultCode == RESULT_CANCELED) {
+                    // The user was asked to change settings, but chose not to
+                    Toast.makeText(
+                        this,
+                        "Cannot Access your Location Please open GPS",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
         }
     }
 
@@ -67,87 +160,60 @@ class AddMemory : BaseActivity() {
             for (location in result.locations) {
                 // Update UI with location data
                 // ...
-                location_text.setText(
-                    "lat= " + location.latitude
-                            + " long= " + location.longitude
-                            + " acc= " + location.accuracy
-                )
+                userLocation = location
+                lat = location.latitude
+                long = location.longitude
+                changeUserLocationOnMap()
             }
         }
     }
-    val locationRequest = LocationRequest.create().apply {
-        interval = 5000
-        fastestInterval = 1000
-        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+
+
+    var googleMap: GoogleMap? = null
+    var userLocation: Location? = null
+    override fun onMapReady(map: GoogleMap?) {
+        this.googleMap = map
+        googleMap?.setMinZoomPreference(5.0f)
+        changeUserLocationOnMap()
     }
 
     @SuppressLint("MissingPermission")
-    fun getLocationFromClientApi() {
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest,
-            locationCallback,
-            Looper.getMainLooper()
+    fun changeUserLocationOnMap() {
+        if (googleMap == null) return
+        if (userLocation == null) return
+//        val markerOptions =
+//            MarkerOptions().position(LatLng(userLocation!!.latitude, userLocation!!.longitude))
+//        val marker = googleMap?.addMarker(markerOptions)
+
+        googleMap?.animateCamera(
+            CameraUpdateFactory.newLatLngZoom(
+                LatLng(
+                    userLocation!!.latitude,
+                    userLocation!!.longitude
+                ), 18.0f
+            )
         )
+        googleMap?.isMyLocationEnabled = true
     }
 
-
-    fun showUserLoction() {
-
-        val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
-        val result = LocationServices.getSettingsClient(this).checkLocationSettings(builder.build())
-
-        result.addOnCompleteListener {
-            try {
-                val response = it.getResult(ApiException::class.java)
-                // All location settings are satisfied. The client can initialize location
-                // requests here.
-                getLocationFromClientApi();
-            } catch (exception: ApiException) {
-                when (exception.statusCode) {
-                    LocationSettingsStatusCodes.RESOLUTION_REQUIRED -> {
-                        // Location settings are not satisfied. But could be fixed by showing the
-                        // user a dialog.
-                        try {
-                            // Cast to a resolvable exception.
-                            val resolvable = exception as ResolvableApiException
-                            // Show the dialog by calling startResolutionForResult(),
-                            // and check the result in onActivityResult().
-                            resolvable.startResolutionForResult(
-                                this@AddMemory,
-                                SETTINGS_DIALOG_REQUEST
-                            )
-                        } catch (e: IntentSender.SendIntentException) {
-                            // Ignore the error.
-                        } catch (e: ClassCastException) {
-                            // Ignore, should be an impossible error.
-                        }
-                    }
-                    LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE -> {
-                        // Location settings are not satisfied. However, we have no way to fix the
-                        // settings so we won't show the dialog.
-                        Toast.makeText(this, "Cannot Access your Location", Toast.LENGTH_LONG)
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        val states: LocationSettingsStates = LocationSettingsStates.fromIntent(data);
-        when (requestCode) {
-            SETTINGS_DIALOG_REQUEST ->
-                if (resultCode == RESULT_OK) {
-                    // All required changes were successfully made
-                    getLocationFromClientApi()
-                } else if (resultCode == RESULT_CANCELED) {
-                    // The user was asked to change settings, but chose not to
-                    Toast.makeText(
-                        this,
-                        "Cannot Access your Location Please open GPS",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+    private fun saveImage(finalBitmap: Bitmap?): File? {
+        val root: String = Environment.getExternalStorageDirectory().toString()
+        val myDir = File("$root/Memories")
+        myDir.mkdirs()
+        val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val fname = "Shutta_$timeStamp.jpg"
+        val file = File(myDir, fname)
+        if (file.exists()) file.delete()
+        try {
+            //Log.e("name",""+myDir+fname)
+            val out = FileOutputStream(file)
+            finalBitmap?.compress(Bitmap.CompressFormat.JPEG, 100, out)
+            out.flush()
+            out.close()
+            return file
+        } catch (e: Exception) {
+            Log.e("ms", "" + e)
+            return null
         }
     }
 

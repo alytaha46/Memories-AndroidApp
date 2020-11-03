@@ -7,11 +7,17 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "Memories")
 data class Memory(
     @PrimaryKey(autoGenerate = true)
-    val id:Int? = null,
+    var id:Int? = null,
     @ColumnInfo
-    val title:String? = null,
+    var title:String? = null,
     @ColumnInfo
-    val description:String? = null,
+    var description:String? = null,
     @ColumnInfo
-    val date:String? = null
+    var date:String? = null,
+    @ColumnInfo
+    var path:String? = null,
+    @ColumnInfo
+    var lat:Double? = null,
+    @ColumnInfo
+    var long:Double? = null
 )
