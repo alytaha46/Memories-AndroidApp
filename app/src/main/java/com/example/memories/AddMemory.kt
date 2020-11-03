@@ -43,7 +43,7 @@ class AddMemory : BaseActivity(), OnMapReadyCallback {
     val CAMERA_REQUEST = 1888
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     var permissions_request: Array<String> =
-        arrayOf(ACCESS_FINE_LOCATION, CAMERA, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE)
+        arrayOf(ACCESS_FINE_LOCATION, CAMERA, WRITE_EXTERNAL_STORAGE)
 
     lateinit var img: ImageView
     lateinit var add_img_button: Button
