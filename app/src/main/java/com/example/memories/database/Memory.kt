@@ -17,7 +17,7 @@ data class Memory(
     @ColumnInfo
     var path:String? = null,
     @ColumnInfo
-    var lat:Double? = null,
+    var latitude:Double? = null,
     @ColumnInfo
-    var long:Double? = null
+    var longitude:Double? = null
 )
