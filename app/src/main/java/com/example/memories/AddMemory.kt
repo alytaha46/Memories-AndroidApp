@@ -51,8 +51,12 @@ class AddMemory : BaseActivity(), OnMapReadyCallback {
     var description: String? = null
     lateinit var save_button: Button
     var bitmap: Bitmap? = null
-    var lat: Double? = null
-    var long: Double? = null
+
+    companion object {
+        var lat: Double = 0.0
+        var long: Double = 0.0
+    }
+
     var file: File? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,7 +67,7 @@ class AddMemory : BaseActivity(), OnMapReadyCallback {
         if (!isPermissionGranted(this, permissions_request)) {
             requestPermissionFromUser(this, permissions_request, PERMISSIONS_REQUEST_CODE)
         } else {
-            showUserLoction(this,fusedLocationClient,locationCallback)
+            showUserLoction(this, fusedLocationClient, locationCallback)
             add_img_button.setOnClickListener {
                 val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
                 startActivityForResult(cameraIntent, CAMERA_REQUEST)
@@ -96,16 +100,18 @@ class AddMemory : BaseActivity(), OnMapReadyCallback {
                 return@setOnClickListener
             }
             file = saveImage(bitmap)
+            val memory = Memory(
+                title = title,
+                description = description,
+                date = Date().toString(),
+                path = file?.path.toString(),
+                latitude = lat,
+                longitude = long
+            )
+            //Toast.makeText(this, "" + memory.latitude + " " + memory.longitude, Toast.LENGTH_SHORT).show()
             MemoriesDatabase.getInstance(applicationContext)
                 .memoriesDao().addMemory(
-                    Memory(
-                        title = title,
-                        description = description,
-                        date = Date().toString(),
-                        path = file?.path.toString(),
-                        lat = lat,
-                        long = long
-                    )
+                    memory
                 )
             finish()
         }
@@ -117,7 +123,7 @@ class AddMemory : BaseActivity(), OnMapReadyCallback {
         grantResults: IntArray
     ) {
         if (grantResults[0] == 0) {
-            showUserLoction(this,fusedLocationClient,locationCallback)
+            showUserLoction(this, fusedLocationClient, locationCallback)
         } else {
             Toast.makeText(this, "User Denied the Location Permissions", Toast.LENGTH_LONG).show()
         }
@@ -142,7 +148,7 @@ class AddMemory : BaseActivity(), OnMapReadyCallback {
             SETTINGS_DIALOG_REQUEST ->
                 if (resultCode == RESULT_OK) {
                     // All required changes were successfully made
-                    getLocationFromClientApi(fusedLocationClient,locationCallback)
+                    getLocationFromClientApi(fusedLocationClient, locationCallback)
                 } else if (resultCode == RESULT_CANCELED) {
                     // The user was asked to change settings, but chose not to
                     Toast.makeText(
